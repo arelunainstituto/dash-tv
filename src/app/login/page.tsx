@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { criarClienteBrowser } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [aEntrar, setAEntrar] = useState(false);
@@ -16,14 +15,14 @@ export default function LoginPage() {
     setErro(null);
     setAEntrar(true);
 
-    const supabase = criarClienteBrowser();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: senha,
-    });
+    const resposta = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario, senha }),
+    }).catch(() => null);
 
-    if (error) {
-      setErro("Email ou palavra-passe incorretos.");
+    if (!resposta?.ok) {
+      setErro("Usuário ou senha incorretos.");
       setAEntrar(false);
       return;
     }
@@ -46,19 +45,19 @@ export default function LoginPage() {
         </p>
 
         <label className="mt-6 block text-sm font-medium text-zinc-700">
-          Email
+          Usuário
           <input
-            type="email"
+            type="text"
             required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+            value={usuario}
+            onChange={(e) => setUsuario(e.target.value)}
             className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200"
           />
         </label>
 
         <label className="mt-4 block text-sm font-medium text-zinc-700">
-          Palavra-passe
+          Senha
           <input
             type="password"
             required

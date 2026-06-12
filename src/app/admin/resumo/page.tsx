@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteAdmin } from "@/lib/supabase/admin";
 import {
   METRICAS,
   valoresZerados,
@@ -9,6 +9,8 @@ import {
 } from "@/lib/metricas";
 import { addMeses, hojeLisboa, inicioDoMes, nomeDoMes } from "@/lib/datas";
 import { formatEur, formatInt } from "@/lib/formato";
+
+export const dynamic = "force-dynamic";
 
 export default async function PaginaResumo({
   searchParams,
@@ -21,7 +23,7 @@ export default async function PaginaResumo({
     mes && /^\d{4}-\d{2}$/.test(mes) ? `${mes}-01` : mesAtual;
   const fim = addMeses(inicio, 1);
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteAdmin();
   const [vend, lanc] = await Promise.all([
     supabase
       .from("vendedores")

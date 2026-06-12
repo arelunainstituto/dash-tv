@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { COOKIE_SESSAO, tokenSessao } from "@/lib/sessao";
 import BotaoSair from "@/components/BotaoSair";
 
 // Revalida a sessão server-side mesmo com o proxy à frente (defesa em
@@ -10,12 +11,9 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const cookieStore = await cookies();
+  const sessao = cookieStore.get(COOKIE_SESSAO)?.value;
+  if (!sessao || sessao !== (await tokenSessao())) {
     redirect("/login");
   }
 
@@ -43,12 +41,15 @@ export default async function AdminLayout({
               >
                 Vendedores
               </Link>
+              <Link
+                href="/admin/metas"
+                className="text-zinc-600 hover:text-zinc-900"
+              >
+                Metas
+              </Link>
             </nav>
           </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="hidden text-zinc-400 sm:inline">{user.email}</span>
-            <BotaoSair />
-          </div>
+          <BotaoSair />
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">

@@ -24,7 +24,11 @@ export default function DateNav({ data, onChange }: Props) {
         type="date"
         value={data}
         max={hoje}
-        onChange={(e) => e.target.value && onChange(e.target.value)}
+        onChange={(e) => {
+          const v = e.target.value;
+          // max= só limita o picker; data futura digitada à mão é ignorada
+          if (v && v <= hoje) onChange(v);
+        }}
         className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm"
       />
       <button

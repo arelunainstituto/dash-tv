@@ -1,8 +1,10 @@
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteAdmin } from "@/lib/supabase/admin";
 import EntryGrid from "@/components/EntryGrid";
 
+export const dynamic = "force-dynamic";
+
 export default async function PaginaDiario() {
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteAdmin();
   const { data: vendedores, error } = await supabase
     .from("vendedores")
     .select("id, nome, ativo, ordem")

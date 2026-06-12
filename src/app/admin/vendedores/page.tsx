@@ -1,8 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { criarClienteBrowser } from "@/lib/supabase/client";
 import type { Vendedor } from "@/lib/metricas";
+
+async function chamarApi(
+  metodo: "POST" | "PATCH",
+  corpo: Record<string, unknown>
+): Promise<string | null> {
+  const resposta = await fetch("/api/vendedores", {
+    method: metodo,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  }).catch(() => null);
+  if (resposta?.status === 401) {
+    window.location.href = "/login";
+    return "Sessão expirada";
+  }
+  if (!resposta?.ok) {
+    const json = await resposta?.json().catch(() => null);
+    return json?.erro ?? "Erro de ligação";
+  }
+  return null;
+}
 
 export default function PaginaVendedores() {
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
@@ -12,20 +31,24 @@ export default function PaginaVendedores() {
   const [aCarregar, setACarregar] = useState(true);
 
   const carregar = useCallback(async () => {
-    const supabase = criarClienteBrowser();
-    const { data, error } = await supabase
-      .from("vendedores")
-      .select("id, nome, ativo, ordem")
-      .order("ordem")
-      .order("nome");
-    if (error) {
-      setErro(`Erro ao carregar vendedores: ${error.message}`);
-    } else {
-      const lista = (data ?? []) as Vendedor[];
-      setVendedores(lista);
-      setNomes(Object.fromEntries(lista.map((v) => [v.id, v.nome])));
-      setErro(null);
+    const resposta = await fetch("/api/vendedores", { cache: "no-store" }).catch(
+      () => null
+    );
+    if (resposta?.status === 401) {
+      window.location.href = "/login";
+      return;
     }
+    if (!resposta?.ok) {
+      setErro("Erro ao carregar vendedores.");
+      setACarregar(false);
+      return;
+    }
+    const { vendedores: lista } = (await resposta.json()) as {
+      vendedores: Vendedor[];
+    };
+    setVendedores(lista);
+    setNomes(Object.fromEntries(lista.map((v) => [v.id, v.nome])));
+    setErro(null);
     setACarregar(false);
   }, []);
 
@@ -39,13 +62,9 @@ export default function PaginaVendedores() {
       setNomes((n) => ({ ...n, [v.id]: v.nome }));
       return;
     }
-    const supabase = criarClienteBrowser();
-    const { error } = await supabase
-      .from("vendedores")
-      .update({ nome })
-      .eq("id", v.id);
-    if (error) {
-      setErro(`Erro ao renomear: ${error.message}`);
+    const falha = await chamarApi("PATCH", { id: v.id, nome });
+    if (falha) {
+      setErro(`Erro ao renomear: ${falha}`);
       setNomes((n) => ({ ...n, [v.id]: v.nome }));
     } else {
       await carregar();
@@ -53,12 +72,8 @@ export default function PaginaVendedores() {
   }
 
   async function alternarAtivo(v: Vendedor) {
-    const supabase = criarClienteBrowser();
-    const { error } = await supabase
-      .from("vendedores")
-      .update({ ativo: !v.ativo })
-      .eq("id", v.id);
-    if (error) setErro(`Erro ao atualizar: ${error.message}`);
+    const falha = await chamarApi("PATCH", { id: v.id, ativo: !v.ativo });
+    if (falha) setErro(`Erro ao atualizar: ${falha}`);
     else await carregar();
   }
 
@@ -66,16 +81,13 @@ export default function PaginaVendedores() {
     const i = vendedores.findIndex((x) => x.id === v.id);
     const vizinho = vendedores[i + direcao];
     if (!vizinho) return;
-    const supabase = criarClienteBrowser();
     // Troca as ordens dos dois; se forem iguais (dados antigos), separa-as.
-    const ordemA = vizinho.ordem === v.ordem ? v.ordem + direcao : vizinho.ordem;
-    const [r1, r2] = await Promise.all([
-      supabase.from("vendedores").update({ ordem: ordemA }).eq("id", v.id),
-      supabase.from("vendedores").update({ ordem: v.ordem }).eq("id", vizinho.id),
+    const ordemNova = vizinho.ordem === v.ordem ? v.ordem + direcao : vizinho.ordem;
+    const [f1, f2] = await Promise.all([
+      chamarApi("PATCH", { id: v.id, ordem: ordemNova }),
+      chamarApi("PATCH", { id: vizinho.id, ordem: v.ordem }),
     ]);
-    if (r1.error || r2.error) {
-      setErro(`Erro ao reordenar: ${r1.error?.message ?? r2.error?.message}`);
-    }
+    if (f1 || f2) setErro(`Erro ao reordenar: ${f1 ?? f2}`);
     await carregar();
   }
 
@@ -83,13 +95,9 @@ export default function PaginaVendedores() {
     e.preventDefault();
     const nome = novoNome.trim();
     if (!nome) return;
-    const maiorOrdem = Math.max(0, ...vendedores.map((v) => v.ordem));
-    const supabase = criarClienteBrowser();
-    const { error } = await supabase
-      .from("vendedores")
-      .insert({ nome, ordem: maiorOrdem + 10 });
-    if (error) {
-      setErro(`Erro ao adicionar: ${error.message}`);
+    const falha = await chamarApi("POST", { nome });
+    if (falha) {
+      setErro(`Erro ao adicionar: ${falha}`);
     } else {
       setNovoNome("");
       await carregar();

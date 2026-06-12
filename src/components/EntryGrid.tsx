@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { criarClienteBrowser } from "@/lib/supabase/client";
 import {
   METRICAS,
+  METRICAS_EDITAVEIS,
   type ChaveMetrica,
   type Lancamento,
   type Vendedor,
@@ -66,22 +66,27 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
       setACarregar(true);
       setMsg(null);
       setInvalidas(new Set());
-      const supabase = criarClienteBrowser();
-      const { data, error } = await supabase
-        .from("lancamentos_diarios")
-        .select("*")
-        .eq("data", dataSel);
+      const resposta = await fetch(`/api/dados?data=${dataSel}`, {
+        cache: "no-store",
+      }).catch(() => null);
 
       if (cancelado) return;
 
-      if (error) {
-        setMsg({ tipo: "erro", texto: `Erro ao carregar: ${error.message}` });
+      if (resposta?.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      if (!resposta?.ok) {
+        setMsg({ tipo: "erro", texto: "Erro ao carregar os dados do dia." });
         setACarregar(false);
         return;
       }
 
+      const { lancamentos } = (await resposta.json()) as {
+        lancamentos: Lancamento[];
+      };
       const novas = celulasVazias(vendedores);
-      for (const linha of (data ?? []) as Lancamento[]) {
+      for (const linha of lancamentos ?? []) {
         if (!novas[linha.vendedor_id]) continue;
         for (const m of METRICAS) {
           const valor = linha[m.chave];
@@ -101,17 +106,33 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
     };
   }, [dataSel, vendedores]);
 
-  // Aviso do browser ao fechar/recargar com alterações por guardar.
+  // Aviso ao sair com alterações por guardar: fechar/recarregar a página
+  // (beforeunload) e navegação interna (links do menu e botão Sair).
   useEffect(() => {
     if (!sujo) return;
     function avisar(e: BeforeUnloadEvent) {
       e.preventDefault();
     }
+    function aoClicarFora(e: MouseEvent) {
+      const alvo = (e.target as HTMLElement).closest?.(
+        "a[href], [data-sair]"
+      );
+      if (!alvo) return;
+      if (!window.confirm("Há alterações por guardar. Sair sem guardar?")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
     window.addEventListener("beforeunload", avisar);
-    return () => window.removeEventListener("beforeunload", avisar);
+    document.addEventListener("click", aoClicarFora, true);
+    return () => {
+      window.removeEventListener("beforeunload", avisar);
+      document.removeEventListener("click", aoClicarFora, true);
+    };
   }, [sujo]);
 
   function mudarData(nova: string) {
+    if (aGuardar) return;
     if (
       sujo &&
       !window.confirm("Há alterações por guardar. Mudar de dia sem guardar?")
@@ -134,7 +155,9 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
   }
 
   const guardar = useCallback(async () => {
-    if (aGuardar) return;
+    // Não gravar durante o carregamento de um dia: as células ainda são do
+    // dia anterior e iriam parar na data recém-selecionada.
+    if (aGuardar || aCarregar) return;
 
     const erradas = new Set<string>();
     const linhas = vendedores.map((v) => {
@@ -142,7 +165,7 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
         vendedor_id: v.id,
         data: dataSel,
       };
-      for (const m of METRICAS) {
+      for (const m of METRICAS_EDITAVEIS) {
         const n = parseCelula(m.tipo, celulas[v.id]?.[m.chave] ?? "");
         if (n === null) {
           erradas.add(`${v.id}:${m.chave}`);
@@ -150,6 +173,10 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
           linha[m.chave] = n;
         }
       }
+      // Caixa = Sinal + Vendas (o servidor recalcula de qualquer forma)
+      linha.valor_em_caixa =
+        Number(linha.sinal_recebido ?? 0) +
+        Number(linha.vendas_presencial ?? 0);
       return linha;
     });
 
@@ -164,22 +191,28 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
 
     setAGuardar(true);
     setMsg(null);
-    const supabase = criarClienteBrowser();
-    const { error } = await supabase
-      .from("lancamentos_diarios")
-      .upsert(linhas, { onConflict: "vendedor_id,data" });
+    const resposta = await fetch("/api/dados", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linhas }),
+    }).catch(() => null);
 
     setAGuardar(false);
-    if (error) {
+    if (resposta?.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (!resposta?.ok) {
+      const corpo = await resposta?.json().catch(() => null);
       setMsg({
         tipo: "erro",
-        texto: `Erro ao guardar — tente novamente. (${error.message})`,
+        texto: `Erro ao guardar — tente novamente.${corpo?.erro ? ` (${corpo.erro})` : ""}`,
       });
       return;
     }
     setBaseline(JSON.stringify(celulas));
     setMsg({ tipo: "ok", texto: `Guardado com sucesso às ${horaLisboa()}.` });
-  }, [aGuardar, vendedores, dataSel, celulas]);
+  }, [aGuardar, aCarregar, vendedores, dataSel, celulas]);
 
   // Enter avança como Tab; Ctrl/Cmd+S guarda.
   useEffect(() => {
@@ -219,10 +252,18 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
     valor_em_caixa: 0,
   };
   for (const v of vendedores) {
-    for (const m of METRICAS) {
+    for (const m of METRICAS_EDITAVEIS) {
       const n = parseCelula(m.tipo, celulas[v.id]?.[m.chave] ?? "");
       if (n !== null) totais[m.chave] += n;
     }
+  }
+  totais.valor_em_caixa = totais.sinal_recebido + totais.vendas_presencial;
+
+  // Caixa da linha = sinal + vendas digitados (texto inválido conta como 0)
+  function caixaDaLinha(vendedorId: string): number {
+    const sinal = parseEur(celulas[vendedorId]?.sinal_recebido ?? "") ?? 0;
+    const vendas = parseEur(celulas[vendedorId]?.vendas_presencial ?? "") ?? 0;
+    return sinal + vendas;
   }
 
   return (
@@ -238,7 +279,7 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
           <button
             type="button"
             onClick={guardar}
-            disabled={aGuardar || !sujo}
+            disabled={aGuardar || aCarregar || !sujo}
             className="rounded-md bg-zinc-900 px-5 py-2 font-medium text-white hover:bg-zinc-700 disabled:opacity-40"
           >
             {aGuardar ? "A guardar…" : "Guardar"}
@@ -274,6 +315,11 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
                   {m.tipo === "eur" && (
                     <span className="ml-1 text-zinc-400">€</span>
                   )}
+                  {m.calculada && (
+                    <span className="block text-xs font-normal text-zinc-400">
+                      = Sinal + Vendas
+                    </span>
+                  )}
                 </th>
               ))}
             </tr>
@@ -286,7 +332,11 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
                 </td>
                 {METRICAS.map((m) => (
                   <td key={m.chave} className="px-2 py-1.5">
-                    {m.tipo === "int" ? (
+                    {m.calculada ? (
+                      <span className="block px-2 py-1.5 text-right tabular-nums text-zinc-500">
+                        {formatEur(caixaDaLinha(v.id))}
+                      </span>
+                    ) : m.tipo === "int" ? (
                       <IntInput
                         valor={celulas[v.id]?.[m.chave] ?? ""}
                         onChange={(t) => aoEditar(v.id, m.chave, t)}

@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const SEM_CACHE = { "Cache-Control": "no-store" };
+const DATA_VALIDA = /^\d{4}-\d{2}-\d{2}$/;
 
 function tokenValido(recebido: string | null): boolean {
   const esperado = process.env.TV_TOKEN;
@@ -25,12 +26,8 @@ function tokenValido(recebido: string | null): boolean {
   return timingSafeEqual(a, b);
 }
 
-export interface LinhaTv {
-  nome: string;
-  mes: Valores;
-  hoje: Valores;
-}
-
+// GET /api/tv?token=…&de=YYYY-MM-DD&ate=YYYY-MM-DD
+// Sem de/ate: período = hoje. Devolve somas do período + valores de hoje.
 export async function GET(request: NextRequest) {
   if (!tokenValido(request.nextUrl.searchParams.get("token"))) {
     return NextResponse.json(
@@ -40,10 +37,14 @@ export async function GET(request: NextRequest) {
   }
 
   const hoje = hojeLisboa();
-  const inicio = inicioDoMes(hoje);
-  const supabase = criarClienteAdmin();
+  let de = request.nextUrl.searchParams.get("de") ?? hoje;
+  let ate = request.nextUrl.searchParams.get("ate") ?? hoje;
+  if (!DATA_VALIDA.test(de)) de = hoje;
+  if (!DATA_VALIDA.test(ate)) ate = hoje;
+  if (de > ate) [de, ate] = [ate, de];
 
-  const [vend, lanc] = await Promise.all([
+  const supabase = criarClienteAdmin();
+  const [vend, lanc, lancHoje] = await Promise.all([
     supabase
       .from("vendedores")
       .select("id, nome, ativo, ordem")
@@ -52,56 +53,105 @@ export async function GET(request: NextRequest) {
     supabase
       .from("lancamentos_diarios")
       .select("*")
-      .gte("data", inicio)
-      .lte("data", hoje),
+      .gte("data", de)
+      .lte("data", ate),
+    supabase.from("lancamentos_diarios").select("*").eq("data", hoje),
   ]);
 
-  if (vend.error || lanc.error) {
+  if (vend.error || lanc.error || lancHoje.error) {
     return NextResponse.json(
-      { erro: vend.error?.message ?? lanc.error?.message },
+      {
+        erro:
+          vend.error?.message ??
+          lanc.error?.message ??
+          lancHoje.error?.message,
+      },
       { status: 500, headers: SEM_CACHE }
     );
   }
 
-  const somasMes = new Map<string, Valores>();
-  const somasHoje = new Map<string, Valores>();
+  const somasPeriodo = new Map<string, Valores>();
   for (const linha of (lanc.data ?? []) as Lancamento[]) {
-    const mes = somasMes.get(linha.vendedor_id) ?? valoresZerados();
-    for (const m of METRICAS) mes[m.chave] += linha[m.chave];
-    somasMes.set(linha.vendedor_id, mes);
-    if (linha.data === hoje) {
-      somasHoje.set(linha.vendedor_id, {
-        ...valoresZerados(),
-        ...Object.fromEntries(METRICAS.map((m) => [m.chave, linha[m.chave]])),
-      });
+    const acc = somasPeriodo.get(linha.vendedor_id) ?? valoresZerados();
+    for (const m of METRICAS) acc[m.chave] += linha[m.chave];
+    somasPeriodo.set(linha.vendedor_id, acc);
+  }
+  const somasHoje = new Map<string, Valores>();
+  for (const linha of (lancHoje.data ?? []) as Lancamento[]) {
+    const acc = valoresZerados();
+    for (const m of METRICAS) acc[m.chave] = linha[m.chave];
+    somasHoje.set(linha.vendedor_id, acc);
+  }
+
+  // Metas por vendedor do mês corrente (tabela 0004). Enquanto estiver
+  // vazia, a meta mensal da equipa cai para metas_mensais (0003).
+  const metaMesPorVendedor = new Map<string, Valores>();
+  const metaDiaPorVendedor = new Map<string, Valores>();
+  const resMetas = await supabase
+    .from("metas_vendedores")
+    .select("*")
+    .eq("mes", inicioDoMes(hoje));
+  if (!resMetas.error) {
+    for (const r of (resMetas.data ?? []) as Record<string, unknown>[]) {
+      const mensal = valoresZerados();
+      const diaria = valoresZerados();
+      for (const m of METRICAS) {
+        mensal[m.chave] = Number(r[m.chave] ?? 0);
+        diaria[m.chave] = Number(r[`${m.chave}_dia`] ?? 0);
+      }
+      metaMesPorVendedor.set(String(r.vendedor_id), mensal);
+      metaDiaPorVendedor.set(String(r.vendedor_id), diaria);
     }
   }
 
-  // Aparece quem está ativo OU teve movimento no mês — um vendedor
-  // desativado a meio do mês continua no painel até virar o mês.
-  const vendedores: LinhaTv[] = ((vend.data ?? []) as Vendedor[])
+  // Aparece quem está ativo OU teve movimento no período.
+  const vendedores = ((vend.data ?? []) as Vendedor[])
     .filter((v) => {
-      const s = somasMes.get(v.id);
+      const s = somasPeriodo.get(v.id);
       return v.ativo || (s && METRICAS.some((m) => s[m.chave] > 0));
     })
     .map((v) => ({
       nome: v.nome,
-      mes: somasMes.get(v.id) ?? valoresZerados(),
+      periodo: somasPeriodo.get(v.id) ?? valoresZerados(),
       hoje: somasHoje.get(v.id) ?? valoresZerados(),
+      metaMes: metaMesPorVendedor.get(v.id) ?? valoresZerados(),
+      metaDia: metaDiaPorVendedor.get(v.id) ?? valoresZerados(),
     }));
 
-  const totais = { mes: valoresZerados(), hoje: valoresZerados() };
+  const totais = {
+    periodo: valoresZerados(),
+    hoje: valoresZerados(),
+    metaMes: valoresZerados(),
+    metaDia: valoresZerados(),
+  };
   for (const v of vendedores) {
     for (const m of METRICAS) {
-      totais.mes[m.chave] += v.mes[m.chave];
+      totais.periodo[m.chave] += v.periodo[m.chave];
       totais.hoje[m.chave] += v.hoje[m.chave];
+      totais.metaMes[m.chave] += v.metaMes[m.chave];
+      totais.metaDia[m.chave] += v.metaDia[m.chave];
+    }
+  }
+
+  // Fallback: sem metas por vendedor, usa a meta mensal da equipa (0003).
+  if (METRICAS.every((m) => totais.metaMes[m.chave] === 0)) {
+    const resEquipa = await supabase
+      .from("metas_mensais")
+      .select("*")
+      .eq("mes", inicioDoMes(hoje))
+      .maybeSingle();
+    if (!resEquipa.error && resEquipa.data) {
+      const equipa = resEquipa.data as unknown as Valores;
+      for (const m of METRICAS) totais.metaMes[m.chave] = equipa[m.chave];
     }
   }
 
   return NextResponse.json(
     {
-      mes: nomeDoMes(hoje),
+      de,
+      ate,
       hoje,
+      mesRotulo: nomeDoMes(hoje),
       atualizadoEm: new Date().toISOString(),
       vendedores,
       totais,

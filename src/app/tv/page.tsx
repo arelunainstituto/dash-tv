@@ -10,8 +10,10 @@ export const metadata: Metadata = {
 export default async function PaginaTv({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; periodo?: string }>;
 }) {
-  const { token } = await searchParams;
-  return <TvBoard token={token ?? ""} />;
+  const { token, periodo } = await searchParams;
+  const inicial =
+    periodo === "semana" || periodo === "mes" ? periodo : "hoje";
+  return <TvBoard token={token ?? ""} modoInicial={inicial} />;
 }

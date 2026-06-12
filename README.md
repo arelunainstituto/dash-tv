@@ -13,16 +13,20 @@ Stack: Next.js (App Router) + Tailwind + Supabase (Postgres + Auth), deploy na V
 
 ### 1. Base de dados
 
-No [Supabase Dashboard](https://supabase.com/dashboard) (projeto OMILUNER) → **SQL Editor** → colar e executar o conteúdo de [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). Isto cria as tabelas `vendedores` e `lancamentos_diarios`, as políticas RLS e os 6 vendedores iniciais.
+No [Supabase Dashboard](https://supabase.com/dashboard) (projeto OMILUNER) → **SQL Editor** → colar e executar, por ordem:
 
-### 2. Usuário admin
+1. [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) — tabelas `vendedores` e `lancamentos_diarios`, RLS e os 6 vendedores iniciais.
+2. [`supabase/migrations/0002_so_admin.sql`](supabase/migrations/0002_so_admin.sql) — **importante**: fecha o acesso direto ao banco (a app acessa tudo pelo servidor com a service role; nenhum outro caminho fica aberto).
+3. [`supabase/migrations/0003_metas.sql`](supabase/migrations/0003_metas.sql) — metas mensais da equipa (usada como fallback).
+4. [`supabase/migrations/0004_metas_vendedores.sql`](supabase/migrations/0004_metas_vendedores.sql) — metas por vendedor, mensais e diárias (a meta da equipa = soma dos vendedores).
 
-- **Authentication → Users → Add user**: email + senha do admin (marcar *Auto Confirm User*).
-- **Authentication → Sign In / Providers**: **desativar "Allow new users to sign up"** — crítico: sem isto, qualquer pessoa poderia se registrar e passar nas políticas RLS.
+### 2. Login do admin
+
+Sem cadastro, sem Supabase Auth: o usuário e a senha ficam no `.env.local` (`ADMIN_USER` / `ADMIN_PASSWORD`). Para trocar a senha, edite a variável e reinicie (ou redeploy na Vercel) — todas as sessões antigas caem automaticamente.
 
 ### 3. Variáveis de ambiente
 
-Copiar `.env.example` para `.env.local` e preencher. O `TV_TOKEN` é o segredo do link da TV — gerar com `openssl rand -hex 24`.
+Copiar `.env.example` para `.env.local` e preencher (5 variáveis). O `TV_TOKEN` é o segredo do link da TV — gerar com `openssl rand -hex 24`.
 
 ### 4. Rodar localmente
 
@@ -38,7 +42,7 @@ npx vercel          # login interativo na primeira vez
 npx vercel --prod
 ```
 
-No dashboard da Vercel → Settings → Environment Variables, configurar as mesmas 4 variáveis do `.env.local`. (Opcional: conectar um repositório GitHub para deploy automático a cada push.)
+No dashboard da Vercel → Settings → Environment Variables, configurar as mesmas 5 variáveis do `.env.local`. (Opcional: conectar um repositório GitHub para deploy automático a cada push.)
 
 ### 6. Configurar a TV
 
@@ -55,8 +59,9 @@ O painel mantém os últimos dados se a ligação cair (aviso "Sem ligação" ap
 - **Corrigir um dia anterior**: navegar até à data, editar, guardar de novo (sobrescreve).
 - **Conferir o mês**: `/admin/resumo` mostra exatamente os acumulados que aparecem na TV.
 - **Vendedores**: `/admin/vendedores` — renomear, adicionar, reordenar, ativar/desativar. Não há exclusão: desative. Inativos saem da grade; ficam no painel enquanto tiverem movimento no mês.
+- **Metas**: `/admin/metas` — por vendedor, com meta do mês e meta diária para cada métrica. No painel: modo Hoje usa a meta diária, modo Mês a mensal, Semana/datas livres usam a diária × nº de dias; o ranking mostra o % da meta de vendas de cada vendedor.
 - **Trocar o token da TV** (se o link vazar): mudar `TV_TOKEN` na Vercel → Redeploy → atualizar o favorito da TV. O link antigo passa a mostrar "Acesso inválido".
-- **Reset de senha do admin**: Supabase Dashboard → Authentication → Users.
+- **Trocar a senha do admin**: editar `ADMIN_PASSWORD` no `.env.local` (local) ou na Vercel (produção) e reiniciar/redeploy.
 
 ## Estrutura
 
