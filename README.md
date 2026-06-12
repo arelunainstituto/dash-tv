@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Relatório Comercial
 
-## Getting Started
+Painel comercial com duas telas:
 
-First, run the development server:
+- **`/admin`** — tela de edição (com login): lançamento manual dos números diários de cada vendedor.
+- **`/tv?token=…`** — tela de visualização para a TV da sala (sem login, somente leitura): acumulado do mês + valores de hoje, auto-atualizada a cada 45 s.
+
+Colunas: Leads Contatados, Vídeo Agendadas, Vídeo Realizadas (quantidades) · Sinal Recebido, Vendas Presencial, Valor em Caixa (valores em €).
+
+Stack: Next.js (App Router) + Tailwind + Supabase (Postgres + Auth), deploy na Vercel.
+
+## Configuração inicial (uma vez)
+
+### 1. Base de dados
+
+No [Supabase Dashboard](https://supabase.com/dashboard) (projeto OMILUNER) → **SQL Editor** → colar e executar o conteúdo de [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). Isto cria as tabelas `vendedores` e `lancamentos_diarios`, as políticas RLS e os 6 vendedores iniciais.
+
+### 2. Usuário admin
+
+- **Authentication → Users → Add user**: email + senha do admin (marcar *Auto Confirm User*).
+- **Authentication → Sign In / Providers**: **desativar "Allow new users to sign up"** — crítico: sem isto, qualquer pessoa poderia se registrar e passar nas políticas RLS.
+
+### 3. Variáveis de ambiente
+
+Copiar `.env.example` para `.env.local` e preencher. O `TV_TOKEN` é o segredo do link da TV — gerar com `openssl rand -hex 24`.
+
+### 4. Rodar localmente
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev   # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 5. Deploy na Vercel
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npx vercel          # login interativo na primeira vez
+npx vercel --prod
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+No dashboard da Vercel → Settings → Environment Variables, configurar as mesmas 4 variáveis do `.env.local`. (Opcional: conectar um repositório GitHub para deploy automático a cada push.)
 
-## Learn More
+### 6. Configurar a TV
 
-To learn more about Next.js, take a look at the following resources:
+1. Abrir `https://<app>.vercel.app/tv?token=<TV_TOKEN>` no browser da TV.
+2. Colocar em ecrã inteiro (F11 ou modo kiosk — ex.: Fully Kiosk em Android TV).
+3. Desativar protetor de ecrã / suspensão automática do dispositivo.
+4. Guardar o link como favorito/página inicial.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+O painel mantém os últimos dados se a ligação cair (aviso "Sem ligação" após 3 min), vira o mês automaticamente e recarrega-se às 04:00.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Operação
 
-## Deploy on Vercel
+- **Lançar o dia**: `/admin` → preencher a grade → Guardar. Campos vazios contam como 0. Enter avança de campo; Ctrl/Cmd+S guarda.
+- **Corrigir um dia anterior**: navegar até à data, editar, guardar de novo (sobrescreve).
+- **Conferir o mês**: `/admin/resumo` mostra exatamente os acumulados que aparecem na TV.
+- **Vendedores**: `/admin/vendedores` — renomear, adicionar, reordenar, ativar/desativar. Não há exclusão: desative. Inativos saem da grade; ficam no painel enquanto tiverem movimento no mês.
+- **Trocar o token da TV** (se o link vazar): mudar `TV_TOKEN` na Vercel → Redeploy → atualizar o favorito da TV. O link antigo passa a mostrar "Acesso inválido".
+- **Reset de senha do admin**: Supabase Dashboard → Authentication → Users.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Estrutura
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Caminho | Função |
+| --- | --- |
+| `src/app/admin/` | Telas de edição (diário, resumo, vendedores) |
+| `src/app/tv/` + `src/components/TvBoard.tsx` | Painel da TV |
+| `src/app/api/tv/route.ts` | Endpoint da TV (valida o token, usa service role no servidor) |
+| `src/lib/metricas.ts` | **Fonte única das métricas/colunas** — para adicionar uma coluna: `alter table` + entrada aqui |
+| `src/lib/datas.ts` | Datas no fuso Europe/Lisbon |
+| `src/lib/formato.ts` | Formatação/parsing pt-PT (€) |
+| `src/proxy.ts` | Proteção de rota `/admin*` |
+| `supabase/migrations/` | Schema SQL |
+
+## Fora do escopo (ideias para v2)
+
+Integração automática com Zoho CRM (o upsert diário já tem o formato pronto para um job externo escrever as mesmas linhas), metas por vendedor com barras de progresso, gráficos de evolução, exportação CSV/PDF, múltiplos usuários/perfis, Realtime em vez de polling.
