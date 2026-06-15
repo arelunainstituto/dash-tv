@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { pedidoAutenticado } from "@/lib/sessao";
-import { METRICAS_EDITAVEIS } from "@/lib/metricas";
+import { limparLinhasDia } from "@/lib/lancamentos";
 import { hojeLisboa } from "@/lib/datas";
 
 export const runtime = "nodejs";
@@ -39,36 +39,10 @@ export async function POST(request: NextRequest) {
 
   const corpo = await request.json().catch(() => null);
   const linhas = (corpo as { linhas?: unknown })?.linhas;
-  if (!Array.isArray(linhas) || linhas.length === 0 || linhas.length > 100) {
-    return NextResponse.json({ erro: "Linhas inválidas" }, { status: 400 });
-  }
 
-  const hoje = hojeLisboa();
-  const limpas: Record<string, string | number>[] = [];
-  for (const linha of linhas as Record<string, unknown>[]) {
-    if (typeof linha.vendedor_id !== "string") {
-      return NextResponse.json({ erro: "vendedor_id inválido" }, { status: 400 });
-    }
-    if (typeof linha.data !== "string" || !DATA_VALIDA.test(linha.data) || linha.data > hoje) {
-      return NextResponse.json({ erro: "Data inválida ou no futuro" }, { status: 400 });
-    }
-    const limpa: Record<string, string | number> = {
-      vendedor_id: linha.vendedor_id,
-      data: linha.data,
-    };
-    for (const m of METRICAS_EDITAVEIS) {
-      const v = linha[m.chave];
-      if (
-        typeof v !== "number" ||
-        !Number.isFinite(v) ||
-        v < 0 ||
-        (m.tipo === "int" && !Number.isInteger(v))
-      ) {
-        return NextResponse.json({ erro: `Valor inválido em ${m.rotulo}` }, { status: 400 });
-      }
-      limpa[m.chave] = v;
-    }
-    limpas.push(limpa);
+  const { limpas, erro } = limparLinhasDia(linhas, hojeLisboa());
+  if (erro || !limpas) {
+    return NextResponse.json({ erro: erro ?? "Linhas inválidas" }, { status: 400 });
   }
 
   const supabase = criarClienteAdmin();

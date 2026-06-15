@@ -1,9 +1,10 @@
 # Relatório Comercial
 
-Painel comercial com duas telas:
+Painel comercial com três telas:
 
 - **`/admin`** — tela de edição (com login): lançamento manual dos números diários de cada vendedor.
 - **`/tv?token=…`** — tela de visualização para a TV da sala (sem login, somente leitura): acumulado do mês + valores de hoje, auto-atualizada a cada 45 s.
+- **`/upload-quadro`** — tela pública (sem login): tira/sobe a foto do quadro branco, a IA (OpenAI Vision) lê os números e mostra uma grade editável; só grava o dia depois do **Confirmar**. Atualiza apenas os resultados diários (nunca as metas).
 
 Colunas: Leads Contatados, Vídeo Agendadas, Vídeo Realizadas, Sinal Recebido (quantidades) · Vendas Presencial (valor em €).
 
@@ -27,7 +28,7 @@ Sem cadastro, sem Supabase Auth: o usuário e a senha ficam no `.env.local` (`AD
 
 ### 3. Variáveis de ambiente
 
-Copiar `.env.example` para `.env.local` e preencher (5 variáveis). O `TV_TOKEN` é o segredo do link da TV — gerar com `openssl rand -hex 24`.
+Copiar `.env.example` para `.env.local` e preencher. O `TV_TOKEN` é o segredo do link da TV — gerar com `openssl rand -hex 24`. O `OPENAI_API_KEY` (server-only) alimenta a leitura da foto em `/upload-quadro`; opcional `OPENAI_MODEL` (padrão `gpt-4o`).
 
 ### 4. Rodar localmente
 
