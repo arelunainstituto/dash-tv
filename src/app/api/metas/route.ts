@@ -95,21 +95,24 @@ export async function POST(request: NextRequest) {
     };
     for (const m of METRICAS_EDITAVEIS) {
       const vDia = linha.diaria?.[m.chave];
-      if (typeof vDia !== "number" || !Number.isFinite(vDia) || vDia < 0) {
+      if (
+        typeof vDia !== "number" ||
+        !Number.isFinite(vDia) ||
+        vDia < 0 ||
+        (m.tipo === "int" && !Number.isInteger(vDia))
+      ) {
         return NextResponse.json(
           { erro: `Valor inválido em ${m.rotulo}` },
           { status: 400 }
         );
       }
       registo[`${m.chave}_dia`] = vDia;
-      registo[m.chave] = Math.round(vDia * diasUteis * 100) / 100;
+      // Métrica inteira (contagem): meta do mês é inteira; € mantém 2 casas.
+      registo[m.chave] =
+        m.tipo === "int"
+          ? vDia * diasUteis
+          : Math.round(vDia * diasUteis * 100) / 100;
     }
-    // Meta de Caixa é sempre calculada: Sinal + Vendas
-    registo.valor_em_caixa_dia =
-      Number(registo.sinal_recebido_dia) +
-      Number(registo.vendas_presencial_dia);
-    registo.valor_em_caixa =
-      Number(registo.sinal_recebido) + Number(registo.vendas_presencial);
     registos.push(registo);
   }
 

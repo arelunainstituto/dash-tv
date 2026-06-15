@@ -5,7 +5,7 @@ Painel comercial com duas telas:
 - **`/admin`** — tela de edição (com login): lançamento manual dos números diários de cada vendedor.
 - **`/tv?token=…`** — tela de visualização para a TV da sala (sem login, somente leitura): acumulado do mês + valores de hoje, auto-atualizada a cada 45 s.
 
-Colunas: Leads Contatados, Vídeo Agendadas, Vídeo Realizadas (quantidades) · Sinal Recebido, Vendas Presencial, Valor em Caixa (valores em €).
+Colunas: Leads Contatados, Vídeo Agendadas, Vídeo Realizadas, Sinal Recebido (quantidades) · Vendas Presencial (valor em €).
 
 Stack: Next.js (App Router) + Tailwind + Supabase (Postgres + Auth), deploy na Vercel.
 
@@ -19,6 +19,7 @@ No [Supabase Dashboard](https://supabase.com/dashboard) (projeto OMILUNER) → *
 2. [`supabase/migrations/0002_so_admin.sql`](supabase/migrations/0002_so_admin.sql) — **importante**: fecha o acesso direto ao banco (a app acessa tudo pelo servidor com a service role; nenhum outro caminho fica aberto).
 3. [`supabase/migrations/0003_metas.sql`](supabase/migrations/0003_metas.sql) — metas mensais da equipa (usada como fallback).
 4. [`supabase/migrations/0004_metas_vendedores.sql`](supabase/migrations/0004_metas_vendedores.sql) — metas por vendedor, mensais e diárias (a meta da equipa = soma dos vendedores).
+5. [`supabase/migrations/0005_sinal_quantidade.sql`](supabase/migrations/0005_sinal_quantidade.sql) — "Sinal Recebido" passa a quantidade (inteiro) e remove o "Valor em Caixa".
 
 ### 2. Login do admin
 

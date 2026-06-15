@@ -47,7 +47,6 @@ const CORES: Record<ChaveMetrica, { texto: string; barra: string }> = {
   video_realizadas: { texto: "text-fuchsia-400", barra: "bg-fuchsia-500" },
   sinal_recebido: { texto: "text-amber-400", barra: "bg-amber-500" },
   vendas_presencial: { texto: "text-emerald-400", barra: "bg-emerald-500" },
-  valor_em_caixa: { texto: "text-cyan-400", barra: "bg-cyan-500" },
 };
 
 const POSICOES = [
@@ -57,7 +56,7 @@ const POSICOES = [
 ];
 
 const GRELHA_TABELA = {
-  gridTemplateColumns: "2.1fr repeat(6, minmax(0, 1fr))",
+  gridTemplateColumns: "2.1fr repeat(5, minmax(0, 1fr))",
   columnGap: "0.8vw",
 };
 
@@ -254,7 +253,6 @@ export default function TvBoard({
   const ranking = [...dados.vendedores].sort(
     (a, b) =>
       b.periodo.vendas_presencial - a.periodo.vendas_presencial ||
-      b.periodo.valor_em_caixa - a.periodo.valor_em_caixa ||
       b.periodo.sinal_recebido - a.periodo.sinal_recebido
   );
   const lider = ranking[0]?.periodo.vendas_presencial ?? 0;
@@ -390,7 +388,7 @@ export default function TvBoard({
       </div>
 
       {/* Cartões KPI por métrica */}
-      <div className="grid grid-cols-6 gap-[0.8vw] px-[1.5vw] py-[1vh]">
+      <div className="grid grid-cols-5 gap-[0.8vw] px-[1.5vw] py-[1vh]">
         {METRICAS.map((m) => {
           const cor = CORES[m.chave];
           const meta = metaDoPeriodo(t.metaMes, t.metaDia, m.chave);
@@ -716,13 +714,9 @@ export default function TvBoard({
                   </span>
                 </div>
                 <p className="mt-[0.5vh] text-[clamp(0.7rem,0.95vw,1.2rem)] text-zinc-400">
-                  Sinal{" "}
+                  Sinais recebidos{" "}
                   <span className="font-semibold text-amber-300">
-                    {formatEurInteiro(t.periodo.sinal_recebido)}
-                  </span>
-                  {" · "}Caixa{" "}
-                  <span className="font-semibold text-cyan-300">
-                    {formatEurInteiro(t.periodo.valor_em_caixa)}
+                    {formatInt(t.periodo.sinal_recebido)}
                   </span>
                 </p>
               </>

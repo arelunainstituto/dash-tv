@@ -58,14 +58,16 @@ export async function POST(request: NextRequest) {
     };
     for (const m of METRICAS_EDITAVEIS) {
       const v = linha[m.chave];
-      if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        v < 0 ||
+        (m.tipo === "int" && !Number.isInteger(v))
+      ) {
         return NextResponse.json({ erro: `Valor inválido em ${m.rotulo}` }, { status: 400 });
       }
       limpa[m.chave] = v;
     }
-    // Valor em Caixa é sempre calculado: Sinal + Vendas
-    limpa.valor_em_caixa =
-      Number(limpa.sinal_recebido) + Number(limpa.vendas_presencial);
     limpas.push(limpa);
   }
 

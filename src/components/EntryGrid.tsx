@@ -31,7 +31,6 @@ function celulasVazias(vendedores: Vendedor[]): Celulas {
       video_realizadas: "",
       sinal_recebido: "",
       vendas_presencial: "",
-      valor_em_caixa: "",
     };
   }
   return c;
@@ -173,10 +172,6 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
           linha[m.chave] = n;
         }
       }
-      // Caixa = Sinal + Vendas (o servidor recalcula de qualquer forma)
-      linha.valor_em_caixa =
-        Number(linha.sinal_recebido ?? 0) +
-        Number(linha.vendas_presencial ?? 0);
       return linha;
     });
 
@@ -249,21 +244,12 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
     video_realizadas: 0,
     sinal_recebido: 0,
     vendas_presencial: 0,
-    valor_em_caixa: 0,
   };
   for (const v of vendedores) {
     for (const m of METRICAS_EDITAVEIS) {
       const n = parseCelula(m.tipo, celulas[v.id]?.[m.chave] ?? "");
       if (n !== null) totais[m.chave] += n;
     }
-  }
-  totais.valor_em_caixa = totais.sinal_recebido + totais.vendas_presencial;
-
-  // Caixa da linha = sinal + vendas digitados (texto inválido conta como 0)
-  function caixaDaLinha(vendedorId: string): number {
-    const sinal = parseEur(celulas[vendedorId]?.sinal_recebido ?? "") ?? 0;
-    const vendas = parseEur(celulas[vendedorId]?.vendas_presencial ?? "") ?? 0;
-    return sinal + vendas;
   }
 
   return (
@@ -315,11 +301,6 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
                   {m.tipo === "eur" && (
                     <span className="ml-1 text-zinc-400">€</span>
                   )}
-                  {m.calculada && (
-                    <span className="block text-xs font-normal text-zinc-400">
-                      = Sinal + Vendas
-                    </span>
-                  )}
                 </th>
               ))}
             </tr>
@@ -332,11 +313,7 @@ export default function EntryGrid({ vendedores }: { vendedores: Vendedor[] }) {
                 </td>
                 {METRICAS.map((m) => (
                   <td key={m.chave} className="px-2 py-1.5">
-                    {m.calculada ? (
-                      <span className="block px-2 py-1.5 text-right tabular-nums text-zinc-500">
-                        {formatEur(caixaDaLinha(v.id))}
-                      </span>
-                    ) : m.tipo === "int" ? (
+                    {m.tipo === "int" ? (
                       <IntInput
                         valor={celulas[v.id]?.[m.chave] ?? ""}
                         onChange={(t) => aoEditar(v.id, m.chave, t)}

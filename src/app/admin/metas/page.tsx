@@ -33,7 +33,6 @@ const camposVazios = (): Campos => ({
   video_realizadas: "",
   sinal_recebido: "",
   vendas_presencial: "",
-  valor_em_caixa: "",
 });
 
 export default function PaginaMetas() {
@@ -117,11 +116,6 @@ export default function PaginaMetas() {
   }
 
   function valorCelula(vendedorId: string, chave: ChaveMetrica): number | null {
-    if (chave === "valor_em_caixa") {
-      const sinal = valorCelula(vendedorId, "sinal_recebido") ?? 0;
-      const vendas = valorCelula(vendedorId, "vendas_presencial") ?? 0;
-      return sinal + vendas;
-    }
     const m = METRICAS.find((x) => x.chave === chave)!;
     const texto = linhas[vendedorId]?.[chave] ?? "";
     return m.tipo === "int" ? parseInteiro(texto) : parseEur(texto);
@@ -144,8 +138,6 @@ export default function PaginaMetas() {
         if (n === null) erradas.add(`${v.id}:${m.chave}`);
         else diaria[m.chave] = n;
       }
-      diaria.valor_em_caixa =
-        (diaria.sinal_recebido ?? 0) + (diaria.vendas_presencial ?? 0);
       return { vendedor_id: v.id, diaria };
     });
 
@@ -239,11 +231,6 @@ export default function PaginaMetas() {
                   {m.tipo === "eur" && (
                     <span className="ml-1 text-zinc-400">€</span>
                   )}
-                  {m.calculada && (
-                    <span className="block text-xs font-normal text-zinc-400">
-                      = Sinal + Vendas
-                    </span>
-                  )}
                 </th>
               ))}
             </tr>
@@ -256,11 +243,7 @@ export default function PaginaMetas() {
                 </td>
                 {METRICAS.map((m) => (
                   <td key={m.chave} className="px-2 py-1.5">
-                    {m.calculada ? (
-                      <span className="block px-2 py-1.5 text-right tabular-nums text-zinc-500">
-                        {formatEur(valorCelula(v.id, m.chave) ?? 0)}
-                      </span>
-                    ) : m.tipo === "int" ? (
+                    {m.tipo === "int" ? (
                       <IntInput
                         valor={linhas[v.id]?.[m.chave] ?? ""}
                         onChange={(t) => aoEditar(v.id, m.chave, t)}
