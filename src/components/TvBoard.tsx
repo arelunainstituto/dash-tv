@@ -31,6 +31,14 @@ interface PayloadTv {
     metaMes: Valores;
     metaDia: Valores;
   };
+  comparativo: {
+    diaCorte: number;
+    mesAtualRotulo: string;
+    mesAntRotulo: string;
+    atual: number;
+    anteriorAteDia: number;
+    anteriorMes: number;
+  };
 }
 
 type Modo = "hoje" | "semana" | "mes" | "livre";
@@ -250,6 +258,19 @@ export default function TvBoard({
 
   // ---- Métricas derivadas ----
   const t = dados.totais;
+
+  // Comparativo mês a mês (faturado) — independente do filtro de período.
+  const cmp = dados.comparativo;
+  const mesAt = cmp ? cmp.mesAtualRotulo.split(" de ")[0] : "";
+  const mesAnt = cmp ? cmp.mesAntRotulo.split(" de ")[0] : "";
+  const deltaPace =
+    cmp && cmp.anteriorAteDia > 0
+      ? Math.round(((cmp.atual - cmp.anteriorAteDia) / cmp.anteriorAteDia) * 100)
+      : null;
+  const pctDoMes =
+    cmp && cmp.anteriorMes > 0
+      ? Math.round((cmp.atual / cmp.anteriorMes) * 100)
+      : null;
   const ranking = [...dados.vendedores].sort(
     (a, b) =>
       b.periodo.vendas_presencial - a.periodo.vendas_presencial ||
@@ -443,6 +464,65 @@ export default function TvBoard({
           );
         })}
       </div>
+
+      {/* Comparativo mês a mês — faturado */}
+      {cmp && (
+        <div className="grid grid-cols-2 gap-[0.8vw] px-[1.5vw] pb-[0.6vh]">
+          {/* Acumulado até o dia de hoje */}
+          <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/70 px-[1vw] py-[0.7vh]">
+            <div className="min-w-0">
+              <span className="text-[clamp(0.6rem,0.8vw,1rem)] font-semibold uppercase tracking-wider text-zinc-400">
+                Faturado até dia {cmp.diaCorte} · {mesAt} vs {mesAnt}
+              </span>
+              <div className="mt-[0.3vh] flex items-baseline gap-[0.6vw]">
+                <span className="text-[clamp(1.2rem,1.9vw,2.6rem)] font-bold tabular-nums text-emerald-300">
+                  {formatEurInteiro(cmp.atual)}
+                </span>
+                <span className="text-[clamp(0.65rem,0.85vw,1.05rem)] text-zinc-500">
+                  vs {formatEurInteiro(cmp.anteriorAteDia)} ({mesAnt})
+                </span>
+              </div>
+            </div>
+            {deltaPace !== null && (
+              <span
+                className={`shrink-0 rounded-full px-[0.8vw] py-[0.4vh] text-[clamp(0.8rem,1.15vw,1.5rem)] font-bold tabular-nums ${
+                  deltaPace >= 0
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "bg-red-500/15 text-red-300"
+                }`}
+              >
+                {deltaPace >= 0 ? "▲ +" : "▼ −"}
+                {Math.abs(deltaPace)}%
+              </span>
+            )}
+          </div>
+
+          {/* Mês em curso vs mês anterior fechado */}
+          <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/70 px-[1vw] py-[0.7vh]">
+            <div className="min-w-0">
+              <span className="text-[clamp(0.6rem,0.8vw,1rem)] font-semibold uppercase tracking-wider text-zinc-400">
+                Mês · {mesAt} (em curso) vs {mesAnt} (fechado)
+              </span>
+              <div className="mt-[0.3vh] flex items-baseline gap-[0.6vw]">
+                <span className="text-[clamp(1.2rem,1.9vw,2.6rem)] font-bold tabular-nums text-zinc-100">
+                  {formatEurInteiro(cmp.atual)}
+                </span>
+                <span className="text-[clamp(0.65rem,0.85vw,1.05rem)] text-zinc-500">
+                  {mesAnt} fechou {formatEurInteiro(cmp.anteriorMes)}
+                </span>
+              </div>
+            </div>
+            {pctDoMes !== null && (
+              <span className="shrink-0 rounded-full bg-sky-500/15 px-[0.8vw] py-[0.4vh] text-[clamp(0.8rem,1.15vw,1.5rem)] font-bold tabular-nums text-sky-300">
+                {pctDoMes}%
+                <span className="ml-1 text-[clamp(0.55rem,0.7vw,0.9rem)] font-normal text-sky-400/80">
+                  do mês passado
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tabela-ranking + análise */}
       <div className="flex min-h-0 flex-1 gap-[0.8vw] px-[1.5vw] pb-[1vh]">

@@ -8,7 +8,7 @@ import {
   type Valores,
   type Vendedor,
 } from "@/lib/metricas";
-import { hojeLisboa, inicioDoMes, nomeDoMes } from "@/lib/datas";
+import { addDias, addMeses, hojeLisboa, inicioDoMes, nomeDoMes } from "@/lib/datas";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -146,6 +146,43 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Comparativo mês a mês do FATURADO (independente do filtro de período):
+  // mês atual até hoje vs mês anterior (no mesmo dia e fechado).
+  const mesAtualIni = inicioDoMes(hoje);
+  const mesAntIni = addMeses(mesAtualIni, -1);
+  const fimMesAnt = addDias(mesAtualIni, -1);
+  const dia = hoje.slice(8, 10);
+  let corteAnt = `${mesAntIni.slice(0, 7)}-${dia}`;
+  if (corteAnt > fimMesAnt) corteAnt = fimMesAnt; // mês anterior mais curto
+
+  const cmp = await supabase
+    .from("lancamentos_diarios")
+    .select("data, vendas_presencial")
+    .gte("data", mesAntIni)
+    .lte("data", hoje);
+
+  let fatAtual = 0;
+  let fatAntAteDia = 0;
+  let fatAntMes = 0;
+  for (const r of (cmp.data ?? []) as { data: string; vendas_presencial: number }[]) {
+    const v = Number(r.vendas_presencial) || 0;
+    if (r.data >= mesAtualIni && r.data <= hoje) {
+      fatAtual += v;
+    } else if (r.data >= mesAntIni && r.data <= fimMesAnt) {
+      fatAntMes += v;
+      if (r.data <= corteAnt) fatAntAteDia += v;
+    }
+  }
+
+  const comparativo = {
+    diaCorte: Number(dia),
+    mesAtualRotulo: nomeDoMes(mesAtualIni),
+    mesAntRotulo: nomeDoMes(mesAntIni),
+    atual: fatAtual,
+    anteriorAteDia: fatAntAteDia,
+    anteriorMes: fatAntMes,
+  };
+
   return NextResponse.json(
     {
       de,
@@ -155,6 +192,7 @@ export async function GET(request: NextRequest) {
       atualizadoEm: new Date().toISOString(),
       vendedores,
       totais,
+      comparativo,
     },
     { headers: SEM_CACHE }
   );

@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .claude/
+
+# Exports de dados (Zoho/Deals) — contêm dados pessoais, NUNCA commitar
+*.csv
